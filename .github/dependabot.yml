@@ -1,0 +1,20 @@
+version: 2
+
+updates:
+  # Third-party actions are pinned by SHA, so they cannot be updated by hand.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ci
+
+  # frankenphp only. The sail images are deliberately excluded: they are a
+  # byte-for-byte fork of upstream laravel/sail, and their base is changed only
+  # by sync-sail.sh following upstream - a bot would break that correspondence.
+  - package-ecosystem: docker
+    directory: /images/frankenphp/runtimes/8.5
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: build

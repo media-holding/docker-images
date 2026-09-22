@@ -1,0 +1,244 @@
+name: Build images
+
+# Manual trigger only: these are base images, there is no point rebuilding them on
+# every push. What gets built is chosen in the run form.
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: 'Which image to build'
+        type: choice
+        required: true
+        default: sail
+        # The list is hardcoded: GitHub Actions has no dynamic choice inputs.
+        # Added an image to images.json? Add it here too (see CONTRIBUTING.md).
+        options: [all, sail, frankenphp]
+      version:
+        description: 'PHP version (all - every version declared in images.json)'
+        type: choice
+        required: true
+        default: all
+        options: [all, '8.5', '8.4', '8.3']
+      platforms:
+        description: 'Architectures'
+        type: choice
+        required: true
+        default: 'linux/amd64,linux/arm64'
+        options:
+          - 'linux/amd64,linux/arm64'
+          - 'linux/amd64'
+      push:
+        description: 'Publish to GHCR (clear it to only check that the build works)'
+        type: boolean
+        required: true
+        default: true
+
+env:
+  REGISTRY: ghcr.io
+  NAMESPACE: ${{ github.repository_owner }}
+
+# Read-only by default. packages: write is granted only to the jobs that actually
+# publish: prepare merely reads images.json.
+permissions:
+  contents: read
+
+jobs:
+  # Expands the inputs into matrices by reading images.json.
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      # build: one job per image x version x architecture
+      build: ${{ steps.set.outputs.build }}
+      # merge: one job per image x version (architectures already stitched)
+      merge: ${{ steps.set.outputs.merge }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - id: set
+        env:
+          IMAGE: ${{ inputs.image }}
+          VERSION: ${{ inputs.version }}
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          set -euo pipefail
+
+          # Common part: select images and versions according to the inputs.
+          jobs=$(jq -c \
+            --arg image "$IMAGE" \
+            --arg version "$VERSION" '
+            # Keys starting with $ are manifest comments, not images.
+            [ to_entries[] | select(.key | startswith("$") | not) ]
+            | map(select($image == "all" or .key == $image))
+            | map(
+                .key as $name | .value as $cfg
+                | $cfg.versions
+                | map(select($version == "all" or . == $version))
+                # targets maps a Dockerfile stage to a tag suffix. No field (sail)
+                # means a single unnamed stage and a tag equal to the version.
+                | map(. as $v
+                    | ($cfg.targets // {"": ""}) | to_entries
+                    | map({
+                        image: $name,
+                        package: $cfg.package,
+                        version: $v,
+                        target: .key,
+                        tag: ($v + .value),
+                        # Stage name for artifact names and cache keys. The tag
+                        # suffix will not do: a `...-8.5-*` pattern would also match
+                        # the digests of the 8.5-build stage.
+                        slug: (if .key == "" then "default" else .key end),
+                        context: ($cfg.context | sub("\\{version\\}"; $v)),
+                        build_args: ($cfg.build_args // {} | to_entries
+                                     | map("\(.key)=\(.value)") | join("\n"))
+                      })
+                  )
+              )
+            | flatten
+          ' images.json)
+
+          if [ "$(echo "$jobs" | jq 'length')" -eq 0 ]; then
+            echo "::error::image=$IMAGE version=$VERSION yields nothing - check images.json"
+            exit 1
+          fi
+
+          # Fan out by architecture: each one builds on a native runner, no QEMU.
+          build=$(echo "$jobs" | jq -c --arg platforms "$PLATFORMS" '
+            map(. as $job
+              | ($platforms | split(",")) | map(
+                  . as $platform
+                  | ($platform | sub("linux/"; "")) as $arch
+                  | $job + {
+                      platform: $platform,
+                      arch: $arch,
+                      runner: (if $arch == "arm64" then "ubuntu-24.04-arm"
+                               else "ubuntu-24.04" end)
+                    }
+                )
+            )
+            | flatten
+            | { include: . }
+          ')
+
+          merge=$(echo "$jobs" | jq -c '{ include: . }')
+
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "merge=$merge" >> "$GITHUB_OUTPUT"
+
+          echo "$build" | jq -r '.include[] | "  \(.package):\(.tag) \(.platform) → \(.runner)"'
+
+  # Each architecture builds separately. No tags are applied here: the image goes to
+  # the registry unnamed, by digest only, and the manifest is stitched in merge.
+  build:
+    permissions:
+      contents: read
+      packages: write
+    name: build ${{ matrix.package }}:${{ matrix.tag }} ${{ matrix.arch }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.build) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Fallback if native arm64 runners are ever unavailable: bring emulation back
+      # by adding
+      #   - uses: docker/setup-qemu-action@<sha>  # pin by SHA, like the others
+      # and building both architectures on ubuntu-24.04 (roughly four times slower).
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: ${{ matrix.context }}
+          platforms: ${{ matrix.platform }}
+          # Empty for images without targets - the whole Dockerfile is built.
+          target: ${{ matrix.target }}
+          build-args: ${{ matrix.build_args }}
+          # A provenance manifest breaks digest stitching in imagetools create.
+          provenance: false
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.package }},push-by-digest=true,name-canonical=true,push=${{ inputs.push }}
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.version }}-${{ matrix.slug }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.version }}-${{ matrix.slug }}-${{ matrix.arch }}
+
+      # The digest is passed to merge through an artifact: filename = hash without prefix.
+      - name: Export digest
+        if: ${{ inputs.push }}
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${DIGEST#sha256:}"
+
+      - name: Upload digest
+        if: ${{ inputs.push }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.version }}-${{ matrix.slug }}-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Stitches the per-arch digests into one multi-arch manifest and applies the tags.
+  merge:
+    permissions:
+      contents: read
+      packages: write
+    name: merge ${{ matrix.package }}:${{ matrix.tag }}
+    needs: [prepare, build]
+    if: ${{ inputs.push }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      # Serially, in images.json order. Stitching a manifest takes seconds, so this
+      # is nearly free, and it makes the primary tag the last one published - GHCR
+      # puts its "Latest" badge on that one instead of whichever won the race.
+      max-parallel: 1
+      matrix: ${{ fromJSON(needs.prepare.outputs.merge) }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: digest-${{ matrix.image }}-${{ matrix.version }}-${{ matrix.slug }}-*
+          merge-multiple: true
+          path: /tmp/digests
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create manifest
+        working-directory: /tmp/digests
+        env:
+          TAG: ${{ matrix.tag }}
+        run: |
+          set -euo pipefail
+          repo="${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.package }}"
+
+          # A floating tag (8.5) plus an immutable one (8.5-20260101-a1b2c3d).
+          # Projects pin the first; the second exists to roll back to one specific
+          # build, since a rebuild overwrites the floating tag.
+          stamp="$(date -u +%Y%m%d)-$(echo "${{ github.sha }}" | cut -c1-7)"
+
+          docker buildx imagetools create \
+            --tag "$repo:$TAG" \
+            --tag "$repo:$TAG-$stamp" \
+            $(printf "$repo@sha256:%s " *)
+
+          docker buildx imagetools inspect "$repo:$TAG"
+
+          {
+            echo "### \`$repo:$TAG\`"
+            echo
+            echo "Immutable tag: \`$repo:$TAG-$stamp\`"
+          } >> "$GITHUB_STEP_SUMMARY"

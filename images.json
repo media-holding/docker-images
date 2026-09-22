@@ -1,0 +1,34 @@
+{
+  "$comment": "Image manifest. The single source of truth for the CI build matrix in .github/workflows/build.yml and for scripts/build.sh. See CONTRIBUTING.md on how to add an image.",
+
+  "sail": {
+    "description": "Laravel Sail runtime, prebuilt",
+    "package": "sail",
+    "context": "images/sail/runtimes/{version}",
+    "versions": ["8.3", "8.4", "8.5"],
+    "platforms": ["linux/amd64", "linux/arm64"],
+    "build_args": {
+      "WWWGROUP": "1000",
+      "NODE_VERSION": "24",
+      "POSTGRES_VERSION": "18"
+    }
+  },
+
+  "frankenphp": {
+    "$comment": "targets maps a Dockerfile stage to a tag suffix. The field is optional: without it the whole Dockerfile is built and the tag equals the version. Key order matters: merge jobs run serially in this order and GHCR marks the last published version as Latest, so the primary tag goes last.",
+    "description": "FrankenPHP production base, prebuilt",
+    "package": "frankenphp",
+    "context": "images/frankenphp/runtimes/{version}",
+    "versions": ["8.5"],
+    "targets": {
+      "build": "-build",
+      "runtime": ""
+    },
+    "platforms": ["linux/amd64", "linux/arm64"],
+    "build_args": {
+      "NODE_VERSION": "24",
+      "PHPREDIS_VERSION": "6.3.0",
+      "PHPREDIS_SHA256": "cb8f81df1a275599e4f8ddcfec7e1f65ed1953e6f5673649149fd680ebff4cad"
+    }
+  }
+}

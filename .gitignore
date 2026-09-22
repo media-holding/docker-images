@@ -1,0 +1,13 @@
+.DS_Store
+*.swp
+
+# Local instructions for Claude - never published
+CLAUDE.md
+.claude/
+
+# Secrets and local overrides must not reach a public repository
+.env
+.env.*
+*.local
+*.pem
+*.key
