@@ -9,6 +9,7 @@ GHCR so that projects don't rebuild the same thing locally.
 |---|---|---|---|
 | `sail` | `ghcr.io/media-holding/sail` | `8.5`, `8.4`, `8.3` | Ready-made Laravel Sail runtime for local development |
 | `frankenphp` | `ghcr.io/media-holding/frankenphp` | `8.5`, `8.5-build` | Production base on FrankenPHP: runtime and build stage |
+| `unit` | `ghcr.io/media-holding/unit` | `8.3` | NGINX Unit with PHP (ZTS, Alpine) for production and local development |
 | `swoole` | — | — | Production base on Octane/Swoole. **Planned, not built yet** |
 
 ### Tags
@@ -75,6 +76,17 @@ phpredis built from source. Published as two tags — `8.5` for the runtime and
 
 There is no application code inside: a project adds its own on top with its own
 `Dockerfile`. See [images/frankenphp/README.md](images/frankenphp/README.md).
+
+## The `unit` image
+
+NGINX Unit with PHP 8.3 (ZTS, Alpine): Unit and its PHP module are built from
+source against the same PHP, `apcu` and `phpredis` are built from source as well.
+Composer, git, make and the PostgreSQL client are included, so the image serves
+both production and local development with the code bind-mounted into `/app`.
+
+Unit comes preconfigured for a Laravel `public/` directory with a dynamic pool of
+PHP processes. Upstream NGINX Unit is archived; the image is kept for applications
+that still run on it. See [images/unit/README.md](images/unit/README.md).
 
 ## Building
 

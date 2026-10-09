@@ -12,7 +12,7 @@ on:
         default: sail
         # The list is hardcoded: GitHub Actions has no dynamic choice inputs.
         # Added an image to images.json? Add it here too (see CONTRIBUTING.md).
-        options: [all, sail, frankenphp]
+        options: [all, sail, frankenphp, unit]
       version:
         description: 'PHP version (all - every version declared in images.json)'
         type: choice

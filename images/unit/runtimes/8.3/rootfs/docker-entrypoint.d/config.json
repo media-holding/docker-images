@@ -1,0 +1,36 @@
+{
+    "listeners": {
+        "*:80": {
+            "pass": "routes"
+        }
+    },
+
+    "routes": [
+        {
+            "match": {
+                "uri": "!/index.php"
+            },
+            "action": {
+                "share": "/app/public$uri",
+                "fallback": {
+                    "pass": "applications/php"
+                }
+            }
+        }
+    ],
+
+    "applications": {
+        "php": {
+            "type": "php",
+            "working_directory": "/app/",
+            "root": "/app/public/",
+            "script": "index.php",
+            "index": "index.php",
+            "processes": {
+                "max": 8,
+                "spare": 2,
+                "idle_timeout": 60
+            }
+        }
+    }
+}
