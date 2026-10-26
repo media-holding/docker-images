@@ -18,7 +18,7 @@ on:
         type: choice
         required: true
         default: all
-        options: [all, '8.5', '8.4', '8.3']
+        options: [all, '8.5', '8.4', '8.3', '8.2']
       platforms:
         description: 'Architectures'
         type: choice

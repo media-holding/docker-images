@@ -8,7 +8,7 @@ GHCR so that projects don't rebuild the same thing locally.
 | Image | Package | Tags | Purpose |
 |---|---|---|---|
 | `sail` | `ghcr.io/media-holding/sail` | `8.5`, `8.4`, `8.3` | Ready-made Laravel Sail runtime for local development |
-| `frankenphp` | `ghcr.io/media-holding/frankenphp` | `8.5`, `8.5-build` | Production base on FrankenPHP: runtime and build stage |
+| `frankenphp` | `ghcr.io/media-holding/frankenphp` | `8.5`, `8.4`, `8.3`, `8.2` (+ `-build` each) | Production base on FrankenPHP: runtime and build stage |
 | `unit` | `ghcr.io/media-holding/unit` | `8.3` | NGINX Unit with PHP (ZTS, Alpine) for production and local development |
 | `swoole` | — | — | Production base on Octane/Swoole. **Planned, not built yet** |
 
@@ -69,10 +69,11 @@ quirk of the prebuilt image.
 
 ## The `frankenphp` image
 
-A production base for Laravel on FrankenPHP: PHP 8.5 with a set of extensions
-(`pdo_pgsql`, `pgsql`, `gd`, `intl`, `zip`, `bcmath`, `pcntl`, `opcache`) and
-phpredis built from source. Published as two tags — `8.5` for the runtime and
-`8.5-build` with Composer and Node for the application build stage.
+A production base for Laravel on FrankenPHP: PHP 8.2–8.5 with a set of
+extensions (`pdo_pgsql`, `pgsql`, `gd`, `intl`, `zip`, `bcmath`, `pcntl`,
+`opcache`) and phpredis built from source. Each version is published as two
+tags — `8.x` for the runtime and `8.x-build` with Composer and Node for the
+application build stage. The base is pinned to an exact PHP patch release.
 
 There is no application code inside: a project adds its own on top with its own
 `Dockerfile`. See [images/frankenphp/README.md](images/frankenphp/README.md).
