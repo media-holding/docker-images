@@ -8,7 +8,9 @@ proxies PHP, the application stays an ordinary stateless Laravel app.
 
 ## What's inside
 
-- base `dunglas/frankenphp:1-php8.5-alpine` (Alpine 3.24, musl);
+- base `dunglas/frankenphp:<FRANKENPHP_VERSION>-php<PHP_RELEASE>-alpine`
+  (Alpine, musl), pinned to an exact PHP patch release — see
+  [Versions](#versions);
 - extensions via `install-php-extensions`: `pdo_pgsql`, `pgsql`, `gd`, `intl`,
   `zip`, `bcmath`, `pcntl`, `opcache`;
 - `phpredis` — built from source from GitHub rather than through PECL: the
@@ -22,14 +24,32 @@ price is build time: `install-php-extensions` compiles `intl` from source
 (minutes instead of seconds). For an image that is rebuilt by hand, that trade is
 worth it.
 
+## Versions
+
+| PHP | Pinned release | Runtime directory |
+|---|---|---|
+| 8.5 | 8.5.12 | `runtimes/8.5` |
+| 8.4 | 8.4.27 | `runtimes/8.4` |
+| 8.3 | 8.3.36 | `runtimes/8.3` |
+| 8.2 | 8.2.35 | `runtimes/8.2` |
+
+These are the releases that fix CVE-2026-109618 and CVE-2026-109619
+(unauthenticated RCE; PHP-FPM, mod_php and FrankenPHP are all affected). Do not
+go below them.
+
+The base is pinned to `<FRANKENPHP_VERSION>-php<PHP_RELEASE>-alpine` rather than
+the floating `1-php8.x-alpine`: a floating tag that is cached on a builder can
+silently bring back a vulnerable PHP. The build also checks that the PHP inside
+is exactly `PHP_RELEASE` and fails otherwise.
+
 ## Tags
 
 | Tag | Adds | For |
 |---|---|---|
-| `8.5` | — | runtime: what ships to production |
-| `8.5-build` | Composer 2 and Node 24 with npm | build stage: `composer install`, `npm run build` |
+| `8.x` | — | runtime: what ships to production |
+| `8.x-build` | Composer 2 and Node 24 with npm | build stage: `composer install`, `npm run build` |
 
-Sizes: 390 MB and 598 MB.
+Sizes for 8.5: 390 MB and 598 MB.
 
 The `build` stage inherits from `runtime`, so in the registry they share the
 lower layers: a runner that already pulled one tag gets the second almost for
@@ -66,7 +86,16 @@ Two things that are easy to get wrong:
 
 ## Updating
 
-`PHPREDIS_VERSION`, `PHPREDIS_SHA256` and `NODE_VERSION` live in `images.json`.
-After changing them rebuild **both** tags together (`./scripts/build.sh
-frankenphp 8.5` does that on its own) — otherwise `8.5` and `8.5-build` drift
-apart and the application ends up built on something other than what it runs on.
+`FRANKENPHP_VERSION`, `PHPREDIS_VERSION`, `PHPREDIS_SHA256` and `NODE_VERSION`
+live in `images.json` and are shared by every PHP version. The PHP patch release
+is `ARG PHP_RELEASE` in each `runtimes/<version>/Dockerfile`.
+
+To pick up a PHP security release: check that the tag exists on Docker Hub
+(`dunglas/frankenphp:<FRANKENPHP_VERSION>-php<new release>-alpine`), bump
+`PHP_RELEASE` (and `FRANKENPHP_VERSION` if the new PHP only ships with a newer
+FrankenPHP), update the table above and rebuild.
+
+After any change rebuild **both** tags of a version together (`./scripts/build.sh
+frankenphp 8.5` does that on its own, `all` rebuilds every version) — otherwise
+`8.5` and `8.5-build` drift apart and the application ends up built on something
+other than what it runs on.

@@ -19,7 +19,7 @@
     "description": "FrankenPHP production base, prebuilt",
     "package": "frankenphp",
     "context": "images/frankenphp/runtimes/{version}",
-    "versions": ["8.5"],
+    "versions": ["8.2", "8.3", "8.4", "8.5"],
     "targets": {
       "build": "-build",
       "runtime": ""
@@ -27,6 +27,7 @@
     "platforms": ["linux/amd64", "linux/arm64"],
     "build_args": {
       "NODE_VERSION": "24",
+      "FRANKENPHP_VERSION": "1.13.3",
       "PHPREDIS_VERSION": "6.3.0",
       "PHPREDIS_SHA256": "cb8f81df1a275599e4f8ddcfec7e1f65ed1953e6f5673649149fd680ebff4cad"
     }

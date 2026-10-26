@@ -11,6 +11,16 @@
 
 ARG NODE_VERSION=24
 
+# The base is pinned to an exact FrankenPHP and PHP patch release instead of the
+# floating 1-php8.5 tag: a cached or stale floating tag can silently bring back
+# a vulnerable PHP. The minimum here is 8.5.12, which fixes CVE-2026-109618 and
+# CVE-2026-109619 (unauthenticated RCE, FrankenPHP affected).
+# FRANKENPHP_VERSION comes from images.json; PHP_RELEASE is per runtime. It is
+# not called PHP_VERSION because the base image already sets an ENV with that
+# name, and an ENV shadows an ARG inside RUN.
+ARG FRANKENPHP_VERSION=1.13.3
+ARG PHP_RELEASE=8.5.12
+
 # Only a source of binaries for the build stage. Never reaches runtime.
 FROM node:${NODE_VERSION}-alpine AS node
 
@@ -19,13 +29,16 @@ FROM node:${NODE_VERSION}-alpine AS node
 # ============================================================================
 # FrankenPHP in classic mode (no worker/Octane): Caddy serves static files and
 # proxies PHP, the application stays an ordinary stateless Laravel app.
-FROM dunglas/frankenphp:1-php8.5-alpine AS runtime
+FROM dunglas/frankenphp:${FRANKENPHP_VERSION}-php${PHP_RELEASE}-alpine AS runtime
+
+ARG FRANKENPHP_VERSION
+ARG PHP_RELEASE
 
 LABEL org.opencontainers.image.title="frankenphp"
 LABEL org.opencontainers.image.description="FrankenPHP production base (PHP 8.5), prebuilt"
 LABEL org.opencontainers.image.source="https://github.com/media-holding/docker-images"
 LABEL org.opencontainers.image.licenses="MIT"
-LABEL org.opencontainers.image.base.name="docker.io/dunglas/frankenphp:1-php8.5-alpine"
+LABEL org.opencontainers.image.base.name="docker.io/dunglas/frankenphp:${FRANKENPHP_VERSION}-php${PHP_RELEASE}-alpine"
 
 ENV TZ=UTC
 ENV LANG=C.UTF-8
@@ -70,6 +83,12 @@ RUN set -eux; \
     rm -rf /tmp/phpredis /tmp/phpredis.tgz; \
     apk del --no-network .phpredis-build; \
     php -m | grep -qix redis
+
+# Fails the build if the base ever resolves to something other than the pinned
+# patch release.
+RUN actual="$(php -r 'echo PHP_VERSION;')"; \
+    [ "$actual" = "$PHP_RELEASE" ] \
+    || { echo "expected PHP $PHP_RELEASE, got $actual" >&2; exit 1; }
 
 WORKDIR /app
 
