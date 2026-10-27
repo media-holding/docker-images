@@ -67,6 +67,18 @@ Start the environment with `./vendor/bin/sail up -d` rather than a bare
 the container fails with `unable to find user`. That is upstream behaviour, not a
 quirk of the prebuilt image.
 
+### PHP security releases
+
+PHP comes from the sury repository and is not pinned: the image gets whatever
+patch release sury has at build time. After a PHP security release, check that
+sury already ships it and rebuild the image **without the cache** — run the
+workflow with `no_cache` set. The `Dockerfile` does not change, so a regular run
+takes the `apt-get install` layer from the cache and publishes the old PHP again.
+
+Then check what got in: `docker run --rm --entrypoint php
+ghcr.io/media-holding/sail:8.5 -v`. The minimum releases are the same as for
+`frankenphp` — see [Versions](images/frankenphp/README.md#versions).
+
 ## The `frankenphp` image
 
 A production base for Laravel on FrankenPHP: PHP 8.2–8.5 with a set of
