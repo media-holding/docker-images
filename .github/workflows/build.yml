@@ -32,6 +32,11 @@ on:
         type: boolean
         required: true
         default: true
+      no_cache:
+        description: 'Build without the layer cache (needed to pick up a PHP security release in sail: its Dockerfile does not change, so the apt layer would come from cache)'
+        type: boolean
+        required: true
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -163,6 +168,7 @@ jobs:
           build-args: ${{ matrix.build_args }}
           # A provenance manifest breaks digest stitching in imagetools create.
           provenance: false
+          no-cache: ${{ inputs.no_cache }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ matrix.package }},push-by-digest=true,name-canonical=true,push=${{ inputs.push }}
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.version }}-${{ matrix.slug }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.version }}-${{ matrix.slug }}-${{ matrix.arch }}

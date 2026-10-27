@@ -44,18 +44,27 @@ ENV TZ=UTC
 ENV LANG=C.UTF-8
 
 # pgsql - the database; gd - required by phpoffice/phpspreadsheet, without it
-# composer install fails on projects that produce spreadsheets; intl/zip/bcmath
-# are basics; pcntl - signal handling in queue:work; opcache - production
-# performance.
+# composer install fails on projects that produce spreadsheets; exif - required
+# by spatie/image (medialibrary); gettext - translations in sokil/php-isocodes;
+# intl/zip/bcmath are basics; pcntl - signal handling in queue:work; opcache -
+# production performance.
 RUN install-php-extensions \
         pdo_pgsql \
         pgsql \
         gd \
+        exif \
+        gettext \
         intl \
         zip \
         bcmath \
         pcntl \
         opcache
+
+# psql: `artisan migrate` on an empty database loads the schema dump
+# (database/schema/*.sql) through it, and `schema:dump` needs pg_dump. The
+# client major matches the PostgreSQL our stacks run; it talks to older servers
+# just as well.
+RUN apk add --no-cache postgresql18-client
 
 # phpredis (cache/sessions/queues) is built from source rather than installed
 # through PECL: the pecl.php.net REST channel regularly answers "does not have

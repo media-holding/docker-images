@@ -11,8 +11,10 @@ proxies PHP, the application stays an ordinary stateless Laravel app.
 - base `dunglas/frankenphp:<FRANKENPHP_VERSION>-php<PHP_RELEASE>-alpine`
   (Alpine, musl), pinned to an exact PHP patch release — see
   [Versions](#versions);
-- extensions via `install-php-extensions`: `pdo_pgsql`, `pgsql`, `gd`, `intl`,
-  `zip`, `bcmath`, `pcntl`, `opcache`;
+- extensions via `install-php-extensions`: `pdo_pgsql`, `pgsql`, `gd`, `exif`,
+  `gettext`, `intl`, `zip`, `bcmath`, `pcntl`, `opcache`;
+- `psql` / `pg_dump` (`postgresql18-client`) — `artisan migrate` loads the schema
+  dump through `psql` on an empty database;
 - `phpredis` — built from source from GitHub rather than through PECL: the
   `pecl.php.net` REST channel regularly answers "does not have REST info xml
   available". The version and its sha256 live in `images.json`
@@ -76,13 +78,20 @@ COPY --from=build --chown=www-data:www-data /app /app
 The rest is the usual application wiring: entrypoint, `SERVER_NAME`,
 permissions, `USER`. `WORKDIR` in the image is already `/app`.
 
-Two things that are easy to get wrong:
+Things that are easy to get wrong:
 
 - **TLS.** If a reverse proxy terminates it, set `SERVER_NAME=:80` and
   `CADDY_GLOBAL_OPTIONS="auto_https off"`. Otherwise FrankenPHP tries to issue a
   certificate itself and moves to 443, leaving the proxy without a backend.
 - **Port 80 is privileged.** Running as a non-privileged user requires
   `setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp`.
+  Caddy also writes to `/data/caddy` and `/config/caddy`, which belong to root:
+  `chown` them to that user.
+- **Healthcheck in non-web containers.** The image inherits upstream's
+  `HEALTHCHECK` (`curl localhost:2019/metrics`, the Caddy admin endpoint). A
+  container running `horizon`, `queue:work` or `schedule:work` from the same
+  image has no Caddy, turns `unhealthy`, and Swarm keeps restarting it. Disable
+  the check for such services (`healthcheck: { disable: true }`).
 
 ## Updating
 
