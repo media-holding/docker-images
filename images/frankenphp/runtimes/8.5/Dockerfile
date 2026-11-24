@@ -99,6 +99,13 @@ RUN actual="$(php -r 'echo PHP_VERSION;')"; \
     [ "$actual" = "$PHP_RELEASE" ] \
     || { echo "expected PHP $PHP_RELEASE, got $actual" >&2; exit 1; }
 
+# The base sets XDG_CONFIG_HOME=/config and XDG_DATA_HOME=/data, both owned by
+# root. Projects run the container as an unprivileged uid of their choosing, so
+# anything that follows XDG (psysh behind `artisan tinker`, Caddy) cannot create
+# its directory there. Sticky world-writable, like /tmp: any uid can create its
+# own subdirectory, nobody can remove someone else's.
+RUN chmod 1777 /config /config/caddy /data /data/caddy
+
 WORKDIR /app
 
 # ============================================================================
